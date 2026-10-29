@@ -354,8 +354,8 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       <form id="authForm">
         <label for="authName" id="authNameLabel" hidden>Seu nome (visível no perfil)</label>
         <input id="authName" maxlength="50" placeholder="Nome completo" autocomplete="name" hidden>
-        <label for="authUsername">Usuário</label>
-        <input id="authUsername" maxlength="30" placeholder="Crie ou informe seu usuário" autocomplete="username" required>
+        <label for="authEmail">E-mail</label>
+<input id="authEmail" type="email" maxlength="254" placeholder="Digite seu e-mail" autocomplete="email" required>
         <label for="authPassword">Senha</label>
         <input id="authPassword" type="password" minlength="10" maxlength="128" placeholder="Use pelo menos 10 caracteres" autocomplete="current-password" required>
         <button class="form-button" type="submit" id="authSubmit">Entrar</button>
@@ -811,34 +811,99 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       cancelEdit.hidden = true;
     }
 
-    form.addEventListener("submit", event => {
+    
+    form.addEventListener("submit", async event => {
       event.preventDefault();
+
       const amount = Number(amountInput.value);
-      if (!descriptionInput.value.trim() || !Number.isFinite(amount) || amount <= 0 || !dateInput.value) {
+      const description = descriptionInput.value.trim();
+      const date = dateInput.value;
+
+      if (
+        !description ||
+        !Number.isFinite(amount) ||
+        amount <= 0 ||
+        !date
+      ) {
         alert("Preencha os campos corretamente e informe um valor maior que zero.");
         return;
       }
-      const transaction = {
-        id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
-        description: descriptionInput.value.trim(),
-        type: typeInput.value,
-        amount: Math.round(amount * 100) / 100,
-        category: categoryInput.value,
-        date: dateInput.value,
-        createdAt: Date.now()
-      };
-      if (editingId) {
-        const old = transactions.find(t => t.id === editingId);
-        if (old) transaction.createdAt = old.createdAt;
-        transactions = transactions.map(t => t.id === editingId ? transaction : t);
-      } else {
-        transactions.push(transaction);
+
+      if (!currentUser?.id) {
+        alert("Sua sessão não foi identificada. Entre novamente na sua conta.");
+        return;
       }
-      saveTransactions();
-      resetForm();
-      renderTransactions();
+
+      const transaction = {
+        description,
+        amount: Math.round(amount * 100) / 100,
+        type: ["income", "receita"].includes(typeInput.value)
+          ? "income"
+          : "expense",
+        category: categoryInput.value || null,
+        transaction_date: date
+      };
+
+      const submitButton = form.querySelector('[type="submit"]');
+      if (submitButton) submitButton.disabled = true;
+
+      try {
+        let result;
+
+        if (editingId) {
+          result = await supabaseClient
+            .from("transactions")
+            .update(transaction)
+            .eq("id", editingId)
+            .eq("user_id", currentUser.id)
+            .select()
+            .single();
+        } else {
+          result = await supabaseClient
+            .from("transactions")
+            .insert({
+              ...transaction,
+              user_id: currentUser.id
+            })
+            .select()
+            .single();
+        }
+
+        if (result.error) throw result.error;
+
+        const item = result.data;
+        const savedTransaction = {
+          id: item.id,
+          description: item.description,
+          amount: Number(item.amount),
+          type: item.type === "income" ? "receita" : "despesa",
+          category: item.category || "",
+          date: item.transaction_date,
+          createdAt: item.created_at
+            ? new Date(item.created_at).getTime()
+            : Date.now()
+        };
+
+        if (editingId) {
+          transactions = transactions.map(t =>
+            t.id === editingId ? savedTransaction : t
+          );
+        } else {
+          transactions.push(savedTransaction);
+        }
+
+        resetForm();
+        renderTransactions();
+
+      } catch (error) {
+        console.error("Erro ao salvar movimentação:", error);
+        alert("Não foi possível salvar a movimentação no Supabase: " + error.message);
+      } finally {
+        if (submitButton) submitButton.disabled = false;
+      }
     });
-    list.addEventListener("click", event => {
+
+    list.addEventListener("click", async event => {
       const editId = event.target.dataset.edit;
       const deleteId = event.target.dataset.delete;
       if (editId) {
@@ -855,16 +920,38 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         cancelEdit.hidden = false;
         descriptionInput.focus();
       }
+      
       if (deleteId) {
         const t = transactions.find(item => item.id === deleteId);
+
         if (t && confirm(`Deseja excluir "${t.description}"?`)) {
-          transactions = transactions.filter(item => item.id !== deleteId);
-          saveTransactions();
-          if (editingId === deleteId) resetForm();
-          renderTransactions();
+          if (!currentUser?.id) {
+            alert("Sua sessão não foi identificada. Entre novamente.");
+            return;
+          }
+
+          try {
+            const { error } = await supabaseClient
+              .from("transactions")
+              .delete()
+              .eq("id", deleteId)
+              .eq("user_id", currentUser.id);
+
+            if (error) throw error;
+
+            transactions = transactions.filter(item => item.id !== deleteId);
+
+            if (editingId === deleteId) resetForm();
+            renderTransactions();
+
+          } catch (error) {
+            console.error("Erro ao excluir movimentação:", error);
+            alert("Não foi possível excluir: " + error.message);
+          }
         }
       }
     });
+
     cancelEdit.addEventListener("click", resetForm);
     filterType.addEventListener("change", renderTransactions);
     filterMonth.addEventListener("change", renderTransactions);
@@ -896,7 +983,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     const authForm = document.getElementById("authForm");
     const authName = document.getElementById("authName");
     const authNameLabel = document.getElementById("authNameLabel");
-    const authUsername = document.getElementById("authUsername");
+    const authEmail = document.getElementById("authEmail");
     const authPassword = document.getElementById("authPassword");
     const authError = document.getElementById("authError");
     const authSubmit = document.getElementById("authSubmit");
@@ -967,18 +1054,78 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       authScreen.hidden = false;
       document.body.classList.remove("system-page");
     }
-    function openApp(user) {
+    
+    async function restoreSupabaseSession() {
+      const { data, error } = await supabaseClient.auth.getSession();
+
+      if (error) {
+        console.error("Erro ao recuperar sessão:", error);
+        showLoginPage();
+        return;
+      }
+
+      const session = data.session;
+
+      if (!session?.user) {
+        showLoginPage();
+        return;
+      }
+
+      const user = session.user;
+
+      openApp({
+        id: user.id,
+        username: user.email,
+        email: user.email,
+        name: user.user_metadata?.full_name || user.email,
+        phone: ""
+      });
+    }
+
+    restoreSupabaseSession();
+
+    async function openApp(user) {
       currentUser = user;
-      setSessionUser(user.username);
       showSystemPage();
-      document.getElementById("profileName").textContent = user.name;
+
+      document.getElementById("profileName").textContent =
+        user.name || user.email || user.username || "Usuário";
+
       fillPersonalForm(user);
       hideProfilePanels();
-      transactions = loadTransactions();
-      resetForm();
-      renderTransactions();
-      updateDayOfYear();
+
+      try {
+        const { data, error } = await supabaseClient
+          .from("transactions")
+          .select("*")
+          .order("transaction_date", { ascending: false });
+
+        if (error) throw error;
+
+        transactions = (data || []).map(item => ({
+          id: item.id,
+          description: item.description,
+          amount: Number(item.amount),
+          type: item.type === "income" ? "receita" : "despesa",
+createdAt: new Date(item.created_at).getTime(),
+          category: item.category || "",
+          date: item.transaction_date
+        }));
+
+        resetForm();
+        renderTransactions();
+        updateDayOfYear();
+
+      } catch (error) {
+        console.error("Erro ao carregar movimentações:", error);
+        transactions = [];
+        resetForm();
+        renderTransactions();
+        authError.textContent =
+          "Você entrou, mas não foi possível carregar as movimentações.";
+      }
     }
+
     function updateDayOfYear() {
       const now = new Date();
       const start = new Date(now.getFullYear(), 0, 1);
@@ -1084,57 +1231,104 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
 
     document.getElementById("showLogin").addEventListener("click", () => setAuthMode("login"));
     document.getElementById("showRegister").addEventListener("click", () => setAuthMode("register"));
+   
     authForm.addEventListener("submit", async event => {
       event.preventDefault();
-      if (Date.now() < lockUntil) {
-        const seconds = Math.ceil((lockUntil - Date.now()) / 1000);
-        authError.textContent = `Muitas tentativas. Aguarde ${seconds} segundos e tente novamente.`;
-        return;
-      }
-      const username = authUsername.value.trim().toLowerCase();
+
+      const email = authEmail.value.trim().toLowerCase();
       const password = authPassword.value;
-      const users = getUsers();
-      if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
-        authError.textContent = "O usuário deve ter de 3 a 30 caracteres: letras, números, ponto, hífen ou sublinhado.";
-        return;
-      }
+      const name = authName.value.trim();
+
       authSubmit.disabled = true;
-      authSubmit.textContent = authMode === "register" ? "Criando perfil…" : "Verificando…";
+      authSubmit.textContent =
+        authMode === "register" ? "Criando conta..." : "Entrando...";
+
       try {
         if (authMode === "register") {
-          const name = authName.value.trim();
-          if (name.length < 2) { authError.textContent = "Informe seu nome para exibir no perfil."; return; }
-          if (password.length < 10) { authError.textContent = "A senha precisa ter pelo menos 10 caracteres."; return; }
-          if (users.some(u => u.username === username)) { authError.textContent = "Esse usuário já existe. Escolha outro."; return; }
-          const hashed = await hashPassword(password);
-          const user = { username, name, passwordHash:hashed.hash, passwordSalt:hashed.salt, passwordAlgorithm:hashed.algorithm, passwordIterations:hashed.iterations };
-          const remaining = users.filter(u => u.username !== username);
-          remaining.push(user);
-          appSet(USERS_KEY, JSON.stringify(remaining));
-          appRemove(LEGACY_USERS_KEY);
-          authForm.reset(); failedAttempts = 0; openApp(user); authError.textContent = "";
-        } else {
-          const user = users.find(u => u.username === username);
-          if (!user || !(await verifyPassword(user, password))) {
-            failedAttempts++;
-            if (failedAttempts >= 5) { lockUntil = Date.now() + 30000; failedAttempts = 0; }
-            authError.textContent = getUsers().length
-              ? "Usuário ou senha incorretos. Confira os dados ou crie um novo perfil."
-              : "Nenhum perfil encontrado neste navegador. Clique em “Criar usuário” para cadastrar sua conta.";
+          if (name.length < 2) {
+            authError.textContent = "Informe seu nome completo.";
             return;
           }
-          failedAttempts = 0;
+
+          if (password.length < 10) {
+            authError.textContent = "A senha precisa ter pelo menos 10 caracteres.";
+            return;
+          }
+
+          const { data, error } = await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+              data: { full_name: name },
+              emailRedirectTo: window.location.origin
+            }
+          });
+
+          if (error) throw error;
+
+          if (!data.session) {
+            authError.textContent =
+              "Conta criada! Confira seu e-mail para confirmar o cadastro antes de entrar.";
+            return;
+          }
+
           authForm.reset();
-          openApp(user);
+
+          openApp({
+            id: data.user.id,
+            username: data.user.email,
+            email: data.user.email,
+            name: name,
+            phone: ""
+          });
+
+          authError.textContent = "";
+
+        } else {
+          const { data, error } =
+            await supabaseClient.auth.signInWithPassword({
+              email,
+              password
+            });
+
+          if (error) throw error;
+
+          const user = data.user;
+          const profileName =
+            user.user_metadata?.full_name || user.email;
+
+          authForm.reset();
+
+          openApp({
+            id: user.id,
+            username: user.email,
+            email: user.email,
+            name: profileName,
+            phone: ""
+          });
+
+          authError.textContent = "";
         }
+
       } catch (error) {
-        authError.textContent = error?.message || "Não foi possível concluir a autenticação neste navegador.";
+        authError.textContent =
+          error.message || "Não foi possível entrar. Tente novamente.";
       } finally {
         authSubmit.disabled = false;
-        authSubmit.textContent = authMode === "register" ? "Criar perfil" : "Entrar";
+        authSubmit.textContent =
+          authMode === "register" ? "Criar perfil" : "Entrar";
       }
     });
-    document.getElementById("logoutButton").addEventListener("click", () => {
+
+    
+    document.getElementById("logoutButton").addEventListener("click", async () => {
+      const { error } = await supabaseClient.auth.signOut();
+
+      if (error) {
+        alert("Não foi possível sair da conta: " + error.message);
+        return;
+      }
+
       clearSessionUser();
       currentUser = null;
       hideProfilePanels();
@@ -1142,7 +1336,9 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       showLoginPage();
       authForm.reset();
       setAuthMode("login");
+      authError.textContent = "";
     });
+
     // Datas locais, sem deslocamento por fuso horário.
     function localDateISO(date = new Date()) {
       return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
