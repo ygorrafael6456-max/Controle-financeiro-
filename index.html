@@ -1344,10 +1344,6 @@ createdAt: new Date(item.created_at).getTime(),
       return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
     }
     dateInput.value = localDateISO();
-    const savedUsername = getSessionUser();
-    const savedUser = getUsers().find(u => u.username === savedUsername);
-    if (savedUser) openApp(savedUser);
-    else { clearSessionUser(); showLoginPage(); }
 
     window.addEventListener("resize", drawFinanceChart);
     renderTransactions();
