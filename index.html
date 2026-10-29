@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Controle Financeiro Pessoal | Projeto CETI Maria Juscelina</title>
@@ -331,6 +332,15 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 
+<script>
+  const SUPABASE_URL = "https://nfyyenyvdkflwbsvhazw.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_RgwWvAjaOItg8v98_GUqhg_v-mccshd";
+
+  const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+  );
+</script>
 </head>
 <body>
   <section class="auth-screen" id="authScreen">
