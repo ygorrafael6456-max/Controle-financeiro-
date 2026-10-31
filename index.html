@@ -772,7 +772,8 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       if (staffDetailPanel) staffDetailPanel.hidden = page !== "staff-detail";
       if (page === "personal" && currentUser) fillPersonalForm(currentUser);
       if (page === "staff" && currentStaffRole === "admin") loadStaffUsers();
-      if (page === "staff-activity" && currentStaffRole === "admin") loadStaffActivity(true);
+      if (page === "staff-activity" && currentStaffRole === "admin" && !options.skipLoad) loadStaffActivity(true);
+      if (page === "reports") window.setTimeout(drawFinanceChart, 60);
       if (!options.fromHistory) {
         const hash = "#" + page;
         if (options.replace) history.replaceState({ appPage: page }, "", hash);
@@ -1758,7 +1759,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     });
 
     function showStaffUsersView() {
-      navigateTo("staff");
+      navigateTo("staff", { skipLoad: true });
       document.getElementById("staffAdminTools").hidden = false;
       document.getElementById("staffSearch").hidden = false;
       document.getElementById("staffRefresh").hidden = false;
@@ -1814,7 +1815,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
 
     async function loadStaffActivity(skipNavigation = false) {
       if (currentStaffRole !== "admin") return;
-      if (!skipNavigation) navigateTo("staff-activity");
+      if (!skipNavigation) navigateTo("staff-activity", { skipLoad: true });
       const message = document.getElementById("staffMessage");
       const list = document.getElementById("staffActivityList");
       document.getElementById("staffAdminTools").hidden = true;
@@ -1891,7 +1892,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       close.type = "button";
       close.className = "secondary";
       close.textContent = "Fechar detalhes";
-      close.addEventListener("click", () => { panel.hidden = true; });
+      close.addEventListener("click", () => navigateTo("staff"));
       panel.append(title, close);
 
       const blockStatusResult = await supabaseClient.rpc("admin_get_user_block_status", {
