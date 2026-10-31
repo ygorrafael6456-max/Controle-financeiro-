@@ -6,6 +6,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Controle Financeiro Pessoal | Projeto CETI Maria Juscelina</title>
   <style>
+    /* Tela de abertura do aplicativo instalado */
+    #appSplash {
+      position: fixed; inset: 0; z-index: 99999;
+      display: grid; place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at 50% 35%, #314fae 0%, #172b70 48%, #0f172a 100%);
+      color: #fff; text-align: center;
+      opacity: 1; visibility: visible;
+      transition: opacity .35s ease, visibility .35s ease;
+    }
+    #appSplash.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    #appSplash .splash-content { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    #appSplash img {
+      width: 104px; height: 104px; border-radius: 25px;
+      box-shadow: 0 14px 40px rgba(0,0,0,.28);
+    }
+    #appSplash strong { font-size: 1.45rem; letter-spacing: -.03em; }
+    #appSplash span { color: rgba(255,255,255,.78); font-size: .92rem; }
+    #appSplash .splash-loader {
+      width: 34px; height: 34px; margin-top: 12px;
+      border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+      border-radius: 50%; animation: splashSpin .8s linear infinite;
+    }
+    @keyframes splashSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #appSplash { transition: none; }
+      #appSplash .splash-loader { animation: none; }
+    }
+  </style>
     :root {
       --bg: #f4f7fb;
       --card: #ffffff;
@@ -408,6 +437,14 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
 </script>
 </head>
 <body>
+  <div id="appSplash" role="status" aria-label="Abrindo Controle Financeiro">
+    <div class="splash-content">
+      <img src="./icon-192.png" alt="">
+      <strong>Controle Financeiro</strong>
+      <span>Seu dinheiro, organizado em um só lugar.</span>
+      <div class="splash-loader" aria-hidden="true"></div>
+    </div>
+  </div>
   <section class="auth-screen" id="authScreen">
     <div class="auth-card">
       <h1>💰 Controle Financeiro</h1>
@@ -2362,6 +2399,25 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     catch (e) { applyTheme(false); }
     themeToggle.addEventListener("click", () => applyTheme(!document.body.classList.contains("dark-mode")));
   </script>
+
+<script>
+  // Esconde a tela de abertura sem bloquear a tela de login nem a inicialização do app.
+  (function () {
+    const splash = document.getElementById("appSplash");
+    if (!splash) return;
+    const hideSplash = () => {
+      splash.classList.add("is-hidden");
+      window.setTimeout(() => splash.remove(), 450);
+    };
+    if (document.readyState === "complete") {
+      window.setTimeout(hideSplash, 350);
+    } else {
+      window.addEventListener("load", () => window.setTimeout(hideSplash, 350), { once: true });
+      // Segurança: se algum recurso externo demorar, libera o acesso mesmo assim.
+      window.setTimeout(hideSplash, 2500);
+    }
+  })();
+</script>
 
 <script>
   // Permite abrir o app offline depois da primeira visita (em hospedagem HTTPS).
