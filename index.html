@@ -491,7 +491,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       <button type="button" id="goReports">Ver relatórios e dicas</button>
     </section>
     <section class="card profile-panel" id="staffPanel" hidden>
-      <h2>🛡️ Painel de staff</h2>
+      <h2>🛡️ Painel da equipe</h2>
       <p class="insight-note" id="staffIntro">Gerencie os cargos das contas cadastradas.</p>
       <div class="staff-toolbar" id="staffAdminTools">
         <input id="staffSearch" type="search" placeholder="Buscar por nome ou usuário" aria-label="Buscar usuário">
@@ -1397,7 +1397,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         document.getElementById("staffAdminTools").hidden = currentStaffRole !== "admin";
         document.getElementById("staffActivityTools").hidden = currentStaffRole !== "admin";
         document.getElementById("staffIntro").textContent = currentStaffRole === "admin"
-          ? "Gerencie os cargos das contas cadastradas. Somente administradores podem alterar a equipe."
+          ? "Gerencie as contas e os cargos. O Dono tem acesso completo ao gerenciamento."
           : "Área reservada à equipe. As ferramentas específicas serão liberadas conforme as permissões.";
 
         const { data, error } = await supabaseClient
@@ -1694,13 +1694,63 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       close.addEventListener("click", () => { panel.hidden = true; });
       panel.append(title, close);
 
+      const editTitle = document.createElement("h4");
+      editTitle.textContent = "Editar dados do usuário";
+      panel.appendChild(editTitle);
+
+      const editForm = document.createElement("form");
+      editForm.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:12px 0 18px;";
+      const makeField = (labelText, value, maxLength) => {
+        const wrap = document.createElement("label");
+        wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = value || "";
+        input.maxLength = maxLength;
+        input.required = labelText !== "Telefone";
+        wrap.append(label, input);
+        editForm.appendChild(wrap);
+        return input;
+      };
+      const nameInput = makeField("Nome", data.display_name, 80);
+      const usernameInput = makeField("Nome de usuário", data.username, 30);
+      const phoneInput = makeField("Telefone", data.phone, 30);
+      const saveProfile = document.createElement("button");
+      saveProfile.type = "submit";
+      saveProfile.textContent = "Salvar alterações";
+      editForm.appendChild(saveProfile);
+      editForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (nameInput.value.trim().length < 2 || usernameInput.value.trim().length < 3) {
+          alert("O nome precisa ter pelo menos 2 caracteres e o usuário pelo menos 3.");
+          return;
+        }
+        saveProfile.disabled = true;
+        saveProfile.textContent = "Salvando...";
+        const result = await supabaseClient.rpc("admin_update_user_profile", {
+          p_user_id: user.user_id,
+          p_display_name: nameInput.value.trim(),
+          p_username: usernameInput.value.trim(),
+          p_phone: phoneInput.value.trim()
+        });
+        if (result.error) {
+          alert("Não foi possível salvar os dados: " + result.error.message);
+          saveProfile.disabled = false;
+          saveProfile.textContent = "Salvar alterações";
+          return;
+        }
+        alert("Dados do usuário atualizados com sucesso!");
+        await loadStaffUsers();
+        await showStaffUserDetails(user);
+      });
+      panel.appendChild(editForm);
+
       const info = document.createElement("div");
       info.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0;";
-      const roleNames = { admin: "Administrador", staff: "Staff" };
+      const roleNames = { admin: "Dono", staff: "Staff" };
       const fields = [
-        ["Nome", data.display_name || "Não informado"],
-        ["Usuário", "@" + (data.username || "não definido")],
-        ["Telefone", data.phone || "Não informado"],
         ["Cargo", roleNames[data.role] || "Usuário"],
         ["Cadastro", data.created_at ? new Date(data.created_at).toLocaleDateString("pt-BR") : "Não informado"],
         ["Movimentações", String(data.total_transactions || 0)],
@@ -1792,7 +1842,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
 
         const roleSelect = document.createElement("select");
         roleSelect.setAttribute("aria-label", "Cargo de " + (user.display_name || user.username || "usuário"));
-        [["","Sem cargo"],["staff","Staff"],["admin","Administrador"]].forEach(([value,label]) => {
+        [["","Sem cargo"],["staff","Staff"],["admin","Dono"]].forEach(([value,label]) => {
           const option = document.createElement("option");
           option.value = value;
           option.textContent = label;
