@@ -1394,6 +1394,17 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         if (profileError) throw profileError;
 
         let profile = savedProfile;
+        if (!profile) {
+          const permanentBanMessage = await getPermanentBanMessage(user.email);
+          if (permanentBanMessage) {
+            currentUser = null;
+            await supabaseClient.auth.signOut();
+            showLoginPage();
+            authError.style.whiteSpace = "pre-line";
+            authError.textContent = permanentBanMessage;
+            return;
+          }
+        }
         if (profile?.is_blocked) {
           const blockedMessage = await getBlockedAccountMessage();
           currentUser = null;
