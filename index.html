@@ -398,7 +398,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         <div class="profile-form-grid">
           <div><label for="personalName">Nome completo</label><input id="personalName" maxlength="50" required></div>
           <div><label for="personalUsername">Nome de usuário</label><input id="personalUsername" maxlength="30" pattern="[a-zA-Z0-9._-]{3,30}" required></div>
-          <div><label for="personalEmail">E-mail (opcional)</label><input id="personalEmail" type="email" maxlength="100" placeholder="voce@exemplo.com"></div>
+          <div><label for="personalEmail">E-mail da conta</label><input id="personalEmail" type="email" maxlength="254" readonly></div>
           <div><label for="personalPhone">Telefone (opcional)</label><input id="personalPhone" type="tel" maxlength="25" placeholder="(00) 00000-0000"></div>
         </div>
         <div class="panel-actions">
@@ -1087,14 +1087,48 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     async function openApp(user) {
       currentUser = user;
       showSystemPage();
-
-      document.getElementById("profileName").textContent =
-        user.name || user.email || user.username || "Usuário";
-
-      fillPersonalForm(user);
       hideProfilePanels();
 
       try {
+        const fallbackUsername = "usuario_" + user.id.replace(/-/g, "").slice(0, 8);
+        const { data: savedProfile, error: profileError } = await supabaseClient
+          .from("profiles")
+          .select("id, display_name, username, phone")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        let profile = savedProfile;
+        if (!profile) {
+          const newProfile = {
+            id: user.id,
+            display_name: user.name || user.user_metadata?.full_name || "",
+            username: fallbackUsername,
+            phone: ""
+          };
+          const { data, error } = await supabaseClient
+            .from("profiles")
+            .upsert(newProfile, { onConflict: "id" })
+            .select("id, display_name, username, phone")
+            .single();
+
+          if (error) throw error;
+          profile = data;
+        }
+
+        currentUser = {
+          ...user,
+          name: profile.display_name || user.name || user.email || "",
+          username: profile.username || fallbackUsername,
+          email: user.email || "",
+          phone: profile.phone || ""
+        };
+
+        document.getElementById("profileName").textContent =
+          currentUser.name || currentUser.email || "Usuário";
+        fillPersonalForm(currentUser);
+
         const { data, error } = await supabaseClient
           .from("transactions")
           .select("*")
@@ -1107,7 +1141,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           description: item.description,
           amount: Number(item.amount),
           type: item.type === "income" ? "receita" : "despesa",
-createdAt: new Date(item.created_at).getTime(),
+          createdAt: new Date(item.created_at).getTime(),
           category: item.category || "",
           date: item.transaction_date
         }));
@@ -1117,12 +1151,9 @@ createdAt: new Date(item.created_at).getTime(),
         updateDayOfYear();
 
       } catch (error) {
-        console.error("Erro ao carregar movimentações:", error);
-        transactions = [];
-        resetForm();
-        renderTransactions();
+        console.error("Erro ao carregar perfil ou movimentações:", error);
         authError.textContent =
-          "Você entrou, mas não foi possível carregar as movimentações.";
+          "Você entrou, mas houve um problema ao carregar seus dados. Atualize a página ou tente novamente.";
       }
     }
 
@@ -1173,37 +1204,60 @@ createdAt: new Date(item.created_at).getTime(),
         target.scrollIntoView({behavior:"smooth", block:"start"});
       }
     });
-    document.getElementById("personalForm").addEventListener("submit", event => {
+    document.getElementById("personalForm").addEventListener("submit", async event => {
       event.preventDefault();
       if (!currentUser) return;
+
       const name = document.getElementById("personalName").value.trim();
       const username = document.getElementById("personalUsername").value.trim().toLowerCase();
-      const email = document.getElementById("personalEmail").value.trim();
       const phone = document.getElementById("personalPhone").value.trim();
+
       if (name.length < 2 || !/^[a-z0-9._-]{3,30}$/.test(username)) {
         alert("Informe um nome válido e um usuário com 3 a 30 caracteres (letras, números, ponto, hífen ou sublinhado).");
         return;
       }
-      const users = getUsers();
-      if (users.some(u => u.username === username && u.username !== currentUser.username)) {
-        alert("Esse nome de usuário já está em uso.");
-        return;
+
+      const saveButton = document.querySelector('#personalForm button[type="submit"]');
+      saveButton.disabled = true;
+      saveButton.textContent = "Salvando...";
+
+      try {
+        const { data, error } = await supabaseClient
+          .from("profiles")
+          .upsert({
+            id: currentUser.id,
+            display_name: name,
+            username,
+            phone
+          }, { onConflict: "id" })
+          .select("id, display_name, username, phone")
+          .single();
+
+        if (error) {
+          if (error.code === "23505") {
+            throw new Error("Esse nome de usuário já está em uso. Escolha outro.");
+          }
+          throw error;
+        }
+
+        currentUser = {
+          ...currentUser,
+          name: data.display_name || name,
+          username: data.username || username,
+          phone: data.phone || ""
+        };
+
+        document.getElementById("profileName").textContent = currentUser.name;
+        fillPersonalForm(currentUser);
+        alert("Dados pessoais salvos na sua conta!");
+        hideProfilePanels();
+      } catch (error) {
+        console.error("Erro ao salvar perfil:", error);
+        alert(error.message || "Não foi possível salvar seus dados. Tente novamente.");
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = "Salvar alterações";
       }
-      const oldUsername = currentUser.username;
-      const updated = {...currentUser, name, username, email, phone};
-      const updatedUsers = users.map(u => u.username === oldUsername ? updated : u);
-      appSet(USERS_KEY, JSON.stringify(updatedUsers));
-      if (oldUsername !== username) {
-        const oldKey = "meuControleFinanceiroV1_" + oldUsername;
-        const newKey = "meuControleFinanceiroV1_" + username;
-        appSet(newKey, appGet(oldKey) || JSON.stringify(transactions));
-        appRemove(oldKey);
-      }
-      currentUser = updated;
-      setSessionUser(username);
-      document.getElementById("profileName").textContent = name;
-      alert("Dados pessoais atualizados!");
-      hideProfilePanels();
     });
     document.getElementById("cancelPersonal").addEventListener("click", () => {
       if (currentUser) fillPersonalForm(currentUser);
