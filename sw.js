@@ -41,7 +41,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // A navegação recebe sempre a versão mais recente; o HTML estático é apenas reserva offline.
-  if (request.mode === 'navigate' || url.pathname.endsWith('/')) {
+  if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).then((response) => {
         if (response && response.status === 200) {
