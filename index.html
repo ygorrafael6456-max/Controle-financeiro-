@@ -2402,20 +2402,40 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
   </script>
 
 <script>
-  // Esconde a tela de abertura sem bloquear a tela de login nem a inicialização do app.
+  // Mantém a tela de abertura por aproximadamente 6 segundos e libera o app
+  // assim que a página carregar, com um limite de segurança para conexões lentas.
   (function () {
     const splash = document.getElementById("appSplash");
     if (!splash) return;
+
+    const startedAt = Date.now();
+    const minimumDuration = 6000;
+    let finished = false;
+    let pageLoaded = document.readyState === "complete";
+
     const hideSplash = () => {
+      if (finished) return;
+      finished = true;
       splash.classList.add("is-hidden");
       window.setTimeout(() => splash.remove(), 450);
     };
-    if (document.readyState === "complete") {
-      window.setTimeout(hideSplash, 350);
+
+    const finishWhenReady = () => {
+      if (!pageLoaded || finished) return;
+      const remaining = Math.max(0, minimumDuration - (Date.now() - startedAt));
+      window.setTimeout(hideSplash, remaining);
+    };
+
+    if (pageLoaded) {
+      finishWhenReady();
     } else {
-      window.addEventListener("load", () => window.setTimeout(hideSplash, 350), { once: true });
-      // Segurança: se algum recurso externo demorar, libera o acesso mesmo assim.
-      window.setTimeout(hideSplash, 2500);
+      window.addEventListener("load", () => {
+        pageLoaded = true;
+        finishWhenReady();
+      }, { once: true });
+
+      // Evita deixar a tela presa caso algum recurso externo não termine de carregar.
+      window.setTimeout(hideSplash, 10000);
     }
   })();
 </script>
