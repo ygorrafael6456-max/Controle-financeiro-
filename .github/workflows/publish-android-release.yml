@@ -1,0 +1,60 @@
+name: Publicar APK oficial
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão do aplicativo (ex.: 1.0.0)'
+        required: true
+        default: '1.0.0'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Preparar chave de assinatura
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CF_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.CF_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.CF_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.CF_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || (echo "Falta configurar CF_KEYSTORE_BASE64" && exit 1)
+          test -n "$KEYSTORE_PASSWORD" || (echo "Falta configurar CF_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Falta configurar CF_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Falta configurar CF_KEY_PASSWORD" && exit 1)
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/controle-financeiro-release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/controle-financeiro-release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+
+      - name: Compilar APK oficial assinado
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+
+      - name: Publicar versão e APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" "android/app/build/outputs/apk/release/app-release.apk#Controle Financeiro para Android" --repo "$GITHUB_REPOSITORY" --title "Controle Financeiro v$VERSION" --notes "Aplicativo oficial Controle Financeiro para Android." --latest
