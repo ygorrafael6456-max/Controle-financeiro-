@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-financeiro-v8';
+const CACHE_NAME = 'controle-financeiro-v9';
 const APP_FILES = [
   './',
   './index.html',
