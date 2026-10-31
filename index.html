@@ -504,6 +504,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       </div>
       <p class="notice" id="staffMessage" role="status">Carregando usuários...</p>
       <div class="staff-users" id="staffUsersList"></div>
+      <div id="staffUserDetails" class="staff-user-details" hidden></div>
       <div class="staff-users" id="staffActivityList" hidden></div>
     </section>
     <section class="dashboard-hero" id="dashboardHero" aria-label="Painel financeiro">
@@ -1564,6 +1565,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       document.getElementById("staffRefresh").hidden = false;
       document.getElementById("staffActivityRefresh").hidden = true;
       document.getElementById("staffUsersList").hidden = false;
+      document.getElementById("staffUserDetails").hidden = true;
       document.getElementById("staffActivityList").hidden = true;
       document.getElementById("staffMessage").textContent = "Gerenciamento de usuários.";
       if (currentStaffRole === "admin") loadStaffUsers();
@@ -1658,6 +1660,92 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     document.getElementById("staffShowActivity").addEventListener("click", loadStaffActivity);
     document.getElementById("staffActivityRefresh").addEventListener("click", loadStaffActivity);
 
+    async function showStaffUserDetails(user) {
+      const panel = document.getElementById("staffUserDetails");
+      panel.hidden = false;
+      panel.replaceChildren();
+      const loading = document.createElement("p");
+      loading.textContent = "Carregando detalhes da conta...";
+      panel.appendChild(loading);
+
+      const { data, error } = await supabaseClient.rpc("admin_get_user_details", {
+        p_user_id: user.user_id
+      });
+      panel.replaceChildren();
+      if (error) {
+        const errorText = document.createElement("p");
+        errorText.textContent = "Não foi possível carregar os detalhes: " + error.message;
+        panel.appendChild(errorText);
+        return;
+      }
+      if (!data) {
+        const empty = document.createElement("p");
+        empty.textContent = "Não foi possível localizar essa conta.";
+        panel.appendChild(empty);
+        return;
+      }
+
+      const title = document.createElement("h3");
+      title.textContent = "Detalhes da conta";
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "secondary";
+      close.textContent = "Fechar detalhes";
+      close.addEventListener("click", () => { panel.hidden = true; });
+      panel.append(title, close);
+
+      const info = document.createElement("div");
+      info.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0;";
+      const roleNames = { admin: "Administrador", staff: "Staff" };
+      const fields = [
+        ["Nome", data.display_name || "Não informado"],
+        ["Usuário", "@" + (data.username || "não definido")],
+        ["Telefone", data.phone || "Não informado"],
+        ["Cargo", roleNames[data.role] || "Usuário"],
+        ["Cadastro", data.created_at ? new Date(data.created_at).toLocaleDateString("pt-BR") : "Não informado"],
+        ["Movimentações", String(data.total_transactions || 0)],
+        ["Total de receitas", money(data.total_income || 0)],
+        ["Total de despesas", money(data.total_expense || 0)]
+      ];
+      fields.forEach(([label, value]) => {
+        const cell = document.createElement("div");
+        cell.style.cssText = "padding:10px;border:1px solid var(--border);border-radius:10px;min-width:0;";
+        const caption = document.createElement("small");
+        caption.style.color = "var(--muted)";
+        caption.textContent = label;
+        const content = document.createElement("strong");
+        content.style.cssText = "display:block;margin-top:4px;overflow-wrap:anywhere;";
+        content.textContent = value;
+        cell.append(caption, content);
+        info.appendChild(cell);
+      });
+      panel.appendChild(info);
+
+      const recentTitle = document.createElement("h4");
+      recentTitle.textContent = "Últimas movimentações";
+      panel.appendChild(recentTitle);
+      const recent = Array.isArray(data.recent_transactions) ? data.recent_transactions : [];
+      if (!recent.length) {
+        const none = document.createElement("p");
+        none.textContent = "Essa conta ainda não possui movimentações.";
+        panel.appendChild(none);
+      } else {
+        recent.forEach(transaction => {
+          const line = document.createElement("div");
+          line.style.cssText = "padding:10px 0;border-bottom:1px solid var(--border);";
+          const name = document.createElement("strong");
+          name.textContent = transaction.description || transaction.category || "Movimentação";
+          const meta = document.createElement("small");
+          const type = transaction.type === "income" || transaction.type === "receita" ? "Receita" : "Despesa";
+          const date = transaction.transaction_date ? formatDate(transaction.transaction_date) : "Sem data";
+          meta.textContent = type + " • " + (transaction.category || "Sem categoria") + " • " + date + " • " + money(transaction.amount || 0);
+          line.append(name, meta);
+          panel.appendChild(line);
+        });
+      }
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
     async function loadStaffUsers() {
       const message = document.getElementById("staffMessage");
       const list = document.getElementById("staffUsersList");
@@ -1696,6 +1784,12 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         username.textContent = "@" + (user.username || "sem usuário");
         identity.append(name, username);
 
+        const detailsButton = document.createElement("button");
+        detailsButton.type = "button";
+        detailsButton.className = "secondary";
+        detailsButton.textContent = "Ver detalhes";
+        detailsButton.addEventListener("click", () => showStaffUserDetails(user));
+
         const roleSelect = document.createElement("select");
         roleSelect.setAttribute("aria-label", "Cargo de " + (user.display_name || user.username || "usuário"));
         [["","Sem cargo"],["staff","Staff"],["admin","Administrador"]].forEach(([value,label]) => {
@@ -1726,7 +1820,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           }
           await loadStaffUsers();
         });
-        card.append(identity, roleSelect, save);
+        card.append(identity, detailsButton, roleSelect, save);
         list.appendChild(card);
       });
     }
