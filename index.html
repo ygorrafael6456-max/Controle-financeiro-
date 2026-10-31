@@ -1322,6 +1322,34 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       }
     }
     
+    async function getPermanentBanMessage(email) {
+      if (!email) return null;
+      try {
+        const { data, error } = await supabaseClient.rpc("get_permanent_ban_status", {
+          p_email: email.trim().toLowerCase()
+        });
+        if (error) {
+          console.error("Não foi possível consultar o banimento permanente:", error);
+          return null;
+        }
+        const details = Array.isArray(data) ? data[0] : data;
+        if (!details) return null;
+        const bannedAt = details.banned_at
+          ? new Date(details.banned_at).toLocaleString("pt-BR")
+          : "Não informado";
+        return [
+          "Esta conta foi banida permanentemente.",
+          "Motivo: " + (details.reason || "Banimento permanente pelo administrador."),
+          "Data e horário: " + bannedAt,
+          "Banida por: " + (details.banned_by || "Administrador"),
+          "O acesso a esta conta foi encerrado."
+        ].join(String.fromCharCode(10));
+      } catch (error) {
+        console.error("Erro ao consultar o banimento permanente:", error);
+        return null;
+      }
+    }
+
     async function restoreSupabaseSession() {
       const { data, error } = await supabaseClient.auth.getSession();
 
@@ -2163,7 +2191,9 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         }
 
       } catch (error) {
-        authError.textContent =
+        const permanentBanMessage = await getPermanentBanMessage(email);
+        authError.style.whiteSpace = "pre-line";
+        authError.textContent = permanentBanMessage ||
           error.message || "Não foi possível entrar. Tente novamente.";
       } finally {
         authSubmit.disabled = false;
