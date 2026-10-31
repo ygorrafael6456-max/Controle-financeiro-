@@ -1759,12 +1759,23 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         blockButton.addEventListener("click", async () => {
           const nextBlocked = !isBlocked;
           const action = nextBlocked ? "bloquear" : "desbloquear";
+          let reason = "";
+          if (nextBlocked) {
+            reason = (prompt("Informe o motivo do bloqueio desta conta:") || "").trim();
+            if (reason.length < 5) {
+              alert("Informe um motivo com pelo menos 5 caracteres.");
+              return;
+            }
+          } else {
+            reason = (prompt("Motivo do desbloqueio (opcional):") || "").trim();
+          }
           if (!confirm("Tem certeza que deseja " + action + " esta conta?")) return;
           blockButton.disabled = true;
           blockButton.textContent = nextBlocked ? "Bloqueando..." : "Desbloqueando...";
           const result = await supabaseClient.rpc("admin_set_user_blocked", {
             p_user_id: user.user_id,
-            p_is_blocked: nextBlocked
+            p_is_blocked: nextBlocked,
+            p_reason: reason || null
           });
           if (result.error) {
             alert("Não foi possível " + action + " a conta: " + result.error.message);
@@ -1777,6 +1788,41 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           await showStaffUserDetails(user);
         });
         panel.appendChild(blockButton);
+
+        const historyTitle = document.createElement("h4");
+        historyTitle.textContent = "Histórico de bloqueios";
+        panel.appendChild(historyTitle);
+        const historyBox = document.createElement("div");
+        historyBox.style.cssText = "display:grid;gap:8px;margin:10px 0 18px;";
+        const historyResult = await supabaseClient.rpc("admin_get_user_block_history", {
+          p_user_id: user.user_id
+        });
+        if (historyResult.error) {
+          const historyError = document.createElement("p");
+          historyError.textContent = "Não foi possível carregar o histórico: " + historyResult.error.message;
+          historyBox.appendChild(historyError);
+        } else if (!Array.isArray(historyResult.data) || historyResult.data.length === 0) {
+          const noHistory = document.createElement("p");
+          noHistory.textContent = "Nenhum bloqueio ou desbloqueio registrado para esta conta.";
+          historyBox.appendChild(noHistory);
+        } else {
+          historyResult.data.forEach(entry => {
+            const item = document.createElement("div");
+            item.style.cssText = "padding:12px;border:1px solid var(--border);border-radius:10px;";
+            const heading = document.createElement("strong");
+            heading.textContent = entry.action === "blocked" ? "🔒 Conta bloqueada" : "🔓 Conta desbloqueada";
+            const meta = document.createElement("small");
+            meta.style.cssText = "display:block;color:var(--muted);margin-top:4px;";
+            meta.textContent = (entry.performed_by_name || "Administrador") + " • " +
+              (entry.created_at ? new Date(entry.created_at).toLocaleString("pt-BR") : "Data não informada");
+            const reasonText = document.createElement("p");
+            reasonText.style.cssText = "margin:8px 0 0;overflow-wrap:anywhere;";
+            reasonText.textContent = "Motivo: " + (entry.reason || "Não informado");
+            item.append(heading, meta, reasonText);
+            historyBox.appendChild(item);
+          });
+        }
+        panel.appendChild(historyBox);
       }
 
       const editTitle = document.createElement("h4");
