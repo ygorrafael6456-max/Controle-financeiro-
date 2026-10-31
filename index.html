@@ -1293,6 +1293,31 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       authScreen.hidden = false;
       document.body.classList.remove("system-page");
     }
+
+    async function getBlockedAccountMessage() {
+      const fallback = "Esta conta está bloqueada. Entre em contato com o administrador.";
+      try {
+        const { data, error } = await supabaseClient.rpc("get_my_block_details");
+        if (error) {
+          console.error("Não foi possível carregar os detalhes do bloqueio:", error);
+          return fallback;
+        }
+        const details = Array.isArray(data) ? data[0] : data;
+        if (!details) return fallback;
+        const reason = details.reason || "Não informado";
+        const blockedAt = details.blocked_at
+          ? new Date(details.blocked_at).toLocaleString("pt-BR")
+          : "Não informado";
+        const blockedBy = details.blocked_by || "Administrador";
+        return "Esta conta está bloqueada.\\nMotivo: " + reason +
+          "\\nData e horário: " + blockedAt +
+          "\\nBloqueada por: " + blockedBy +
+          "\\nEntre em contato com o administrador.";
+      } catch (error) {
+        console.error("Erro ao consultar os detalhes do bloqueio:", error);
+        return fallback;
+      }
+    }
     
     async function restoreSupabaseSession() {
       const { data, error } = await supabaseClient.auth.getSession();
@@ -1339,10 +1364,12 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
 
         let profile = savedProfile;
         if (profile?.is_blocked) {
+          const blockedMessage = await getBlockedAccountMessage();
           currentUser = null;
           await supabaseClient.auth.signOut();
           showLoginPage();
-          authError.textContent = "Esta conta está bloqueada. Entre em contato com o administrador.";
+          authError.style.whiteSpace = "pre-line";
+          authError.textContent = blockedMessage;
           return;
         }
         if (!profile) {
@@ -1388,10 +1415,12 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         profile = confirmedProfile;
 
         if (profile.is_blocked) {
+          const blockedMessage = await getBlockedAccountMessage();
           currentUser = null;
           await supabaseClient.auth.signOut();
           showLoginPage();
-          authError.textContent = "Esta conta está bloqueada. Entre em contato com o administrador.";
+          authError.style.whiteSpace = "pre-line";
+          authError.textContent = blockedMessage;
           return;
         }
 
@@ -1408,13 +1437,15 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
             filter: "id=eq." + user.id
           }, async payload => {
             if (payload.new?.is_blocked === true) {
+              const blockedMessage = await getBlockedAccountMessage();
               await supabaseClient.auth.signOut();
               currentUser = null;
               currentStaffRole = null;
               staffUsersCache = [];
               transactions = [];
               showLoginPage();
-              authError.textContent = "Sua conta foi bloqueada pelo administrador.";
+              authError.style.whiteSpace = "pre-line";
+              authError.textContent = blockedMessage;
               if (blockedProfileChannel) {
                 await supabaseClient.removeChannel(blockedProfileChannel);
                 blockedProfileChannel = null;
