@@ -497,8 +497,14 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         <input id="staffSearch" type="search" placeholder="Buscar por nome ou usuário" aria-label="Buscar usuário">
         <button type="button" class="secondary" id="staffRefresh">Atualizar lista</button>
       </div>
+      <div class="staff-toolbar" id="staffActivityTools">
+        <button type="button" class="secondary" id="staffShowUsers">Gerenciar usuários</button>
+        <button type="button" class="secondary" id="staffShowActivity">Histórico de atividades</button>
+        <button type="button" class="secondary" id="staffActivityRefresh" hidden>Atualizar histórico</button>
+      </div>
       <p class="notice" id="staffMessage" role="status">Carregando usuários...</p>
       <div class="staff-users" id="staffUsersList"></div>
+      <div class="staff-users" id="staffActivityList" hidden></div>
     </section>
     <section class="dashboard-hero" id="dashboardHero" aria-label="Painel financeiro">
       <div class="hero-main">
@@ -1549,6 +1555,57 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         profileMenuButton.setAttribute("aria-expanded", "false");
       }
     });
+
+    function showStaffUsersView() {
+      document.getElementById("staffAdminTools").hidden = false;
+      document.getElementById("staffSearch").hidden = false;
+      document.getElementById("staffRefresh").hidden = false;
+      document.getElementById("staffActivityRefresh").hidden = true;
+      document.getElementById("staffUsersList").hidden = false;
+      document.getElementById("staffActivityList").hidden = true;
+      document.getElementById("staffMessage").textContent = "Gerenciamento de usuários.";
+      if (currentStaffRole === "admin") loadStaffUsers();
+    }
+
+    async function loadStaffActivity() {
+      if (currentStaffRole !== "admin") return;
+      const message = document.getElementById("staffMessage");
+      const list = document.getElementById("staffActivityList");
+      document.getElementById("staffAdminTools").hidden = true;
+      document.getElementById("staffActivityRefresh").hidden = false;
+      document.getElementById("staffUsersList").hidden = true;
+      list.hidden = false;
+      list.replaceChildren();
+      message.textContent = "Carregando histórico...";
+      const { data, error } = await supabaseClient.rpc("admin_list_activity", { p_limit: 100 });
+      if (error) {
+        message.textContent = "Não foi possível carregar o histórico: " + error.message;
+        return;
+      }
+      if (!data || !data.length) {
+        message.textContent = "Ainda não há atividades registradas. Novas movimentações aparecerão aqui.";
+        return;
+      }
+      message.textContent = data.length + " atividade(s) mais recente(s).";
+      data.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "staff-user";
+        card.style.gridTemplateColumns = "minmax(0,1fr)";
+        const heading = document.createElement("strong");
+        heading.textContent = (item.actor_name || "Conta") + " " + item.action + " uma " + (item.entity || "atividade");
+        const meta = document.createElement("small");
+        const date = item.created_at ? new Date(item.created_at).toLocaleString("pt-BR") : "";
+        meta.textContent = "Usuário: @" + (item.actor_username || "sem usuário") + " • " + date;
+        const details = document.createElement("small");
+        details.textContent = item.details ? JSON.stringify(item.details) : "Sem detalhes adicionais";
+        card.append(heading, meta, details);
+        list.appendChild(card);
+      });
+    }
+
+    document.getElementById("staffShowUsers").addEventListener("click", showStaffUsersView);
+    document.getElementById("staffShowActivity").addEventListener("click", loadStaffActivity);
+    document.getElementById("staffActivityRefresh").addEventListener("click", loadStaffActivity);
 
     async function loadStaffUsers() {
       const message = document.getElementById("staffMessage");
