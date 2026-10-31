@@ -693,9 +693,9 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     const appMain = document.querySelector("#appShell main");
     const appPages = {};
     const pageDefinitions = {
-      dashboard: { title: "Visão geral", ids: ["dashboardHero", "overviewSection"] },
-      transactions: { title: "Movimentações", ids: ["transactionsSection"] },
-      reports: { title: "Relatórios e dicas", ids: ["reportsSection"] },
+      dashboard: { title: "Visão geral", ids: ["dashboardHero", "overviewSection", "transactionsSection", "reportsSection"] },
+      transactions: { title: "Movimentações", ids: [] },
+      reports: { title: "Relatórios e dicas", ids: [] },
       personal: { title: "Dados pessoais", ids: ["personalPanel"] },
       preferences: { title: "Preferências", ids: ["preferencesPanel"] },
       staff: { title: "Painel Staff", ids: ["staffPanel"] }
@@ -761,6 +761,21 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       if (!allowed.includes(page)) page = "dashboard";
       if (page.startsWith("staff") && !["admin", "staff"].includes(currentStaffRole)) page = "dashboard";
       if (page === "staff-detail" && currentStaffRole !== "admin") page = "staff";
+
+      // As seções de movimentações e relatórios aparecem completas na Visão geral.
+      // Quando o usuário abre uma delas pelo menu, movemos a seção para sua página própria.
+      const dashboardPage = appPages.dashboard;
+      const transactionsSection = document.getElementById("transactionsSection");
+      const reportsSection = document.getElementById("reportsSection");
+      if (page === "dashboard") {
+        if (transactionsSection) dashboardPage.appendChild(transactionsSection);
+        if (reportsSection) dashboardPage.appendChild(reportsSection);
+      } else if (page === "transactions" && transactionsSection) {
+        appPages.transactions.appendChild(transactionsSection);
+      } else if (page === "reports" && reportsSection) {
+        appPages.reports.appendChild(reportsSection);
+      }
+
       activeAppPage = page;
       Object.entries(appPages).forEach(([key, element]) => { element.hidden = key !== page && !(page === "staff-activity" && key === "staff"); });
       const personal = document.getElementById("personalPanel");
@@ -773,7 +788,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       if (page === "personal" && currentUser) fillPersonalForm(currentUser);
       if (page === "staff" && currentStaffRole === "admin") loadStaffUsers();
       if (page === "staff-activity" && currentStaffRole === "admin" && !options.skipLoad) loadStaffActivity(true);
-      if (page === "reports") window.setTimeout(drawFinanceChart, 60);
+      if (page === "dashboard" || page === "reports") window.setTimeout(drawFinanceChart, 60);
       if (!options.fromHistory) {
         const hash = "#" + page;
         if (options.replace) history.replaceState({ appPage: page }, "", hash);
