@@ -329,8 +329,8 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
   <meta name="theme-color" content="#243f9f">
   <meta name="description" content="Controle suas entradas, gastos e economias em um só lugar.">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
 <script>
   const SUPABASE_URL = "https://nfyyenyvdkflwbsvhazw.supabase.co";
@@ -361,7 +361,16 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         <button class="form-button" type="submit" id="authSubmit">Entrar</button>
         <p class="auth-error" id="authError" role="alert"></p>
       </form>
-      <p class="notice">Segurança aprimorada para demonstração: a senha é armazenada como hash com salt, e a sessão termina ao fechar a aba. Como este é um arquivo local, não existe autenticação de servidor; não use senhas reutilizadas nem dados financeiros reais.</p>
+      <button class="secondary form-button" type="button" id="forgotPasswordButton">Esqueci minha senha</button>
+      <form id="recoveryPasswordForm" hidden>
+        <label for="recoveryNewPassword">Nova senha</label>
+        <input id="recoveryNewPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password" placeholder="Pelo menos 10 caracteres" required>
+        <label for="recoveryConfirmPassword">Confirme a nova senha</label>
+        <input id="recoveryConfirmPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password" placeholder="Digite a senha novamente" required>
+        <button class="form-button" type="submit" id="recoveryPasswordSubmit">Salvar nova senha</button>
+        <p class="auth-error" id="recoveryPasswordMessage" role="alert"></p>
+      </form>
+      <p class="notice">Sua conta e suas movimentações são protegidas pelo Supabase. Nunca compartilhe sua senha.</p>
     </div>
   </section>
   <div id="appShell" hidden>
@@ -405,7 +414,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           <button type="submit">Salvar alterações</button>
           <button class="secondary" type="button" id="cancelPersonal">Cancelar</button>
         </div>
-        <p class="notice">Esses dados ficam apenas neste navegador neste protótipo. Não informe dados confidenciais.</p>
+        <p class="notice">Essas informações ficam salvas no seu perfil.</p>
       </form>
     </section>
     <section class="card profile-panel" id="preferencesPanel" hidden>
@@ -495,7 +504,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           <button class="form-button" type="submit" id="submitButton">Adicionar movimentação</button>
           <button class="secondary form-button" type="button" id="cancelEdit" hidden>Cancelar edição</button>
         </form>
-        <p class="notice">Os dados ficam salvos neste navegador. Se limpar os dados do navegador ou trocar de dispositivo, eles podem ser perdidos. Não cadastre senhas nem dados bancários confidenciais.</p>
+        <p class="notice">Suas movimentações são salvas na sua conta e podem ser acessadas em outros dispositivos ao entrar com o mesmo e-mail.</p>
       </section>
 
       <section class="card">
@@ -1043,6 +1052,92 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       authSubmit.textContent = registering ? "Criar perfil" : "Entrar";
       authError.textContent = "";
     }
+    const forgotPasswordButton = document.getElementById("forgotPasswordButton");
+    const recoveryPasswordForm = document.getElementById("recoveryPasswordForm");
+    const recoveryPasswordMessage = document.getElementById("recoveryPasswordMessage");
+
+    forgotPasswordButton.addEventListener("click", async () => {
+      const email = authEmail.value.trim().toLowerCase();
+      if (!email) {
+        authError.textContent = "Digite seu e-mail acima para receber o link de recuperação.";
+        authEmail.focus();
+        return;
+      }
+
+      forgotPasswordButton.disabled = true;
+      forgotPasswordButton.textContent = "Enviando...";
+      authError.textContent = "";
+
+      try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+          redirectTo: "https://ygorrafael6456-max.github.io/Controle-financeiro-/"
+        });
+        if (error) throw error;
+        authError.textContent = "Se esse e-mail estiver cadastrado, você receberá um link para redefinir a senha. Confira também o spam.";
+      } catch (error) {
+        authError.textContent = error.message || "Não foi possível enviar o e-mail de recuperação.";
+      } finally {
+        forgotPasswordButton.disabled = false;
+        forgotPasswordButton.textContent = "Esqueci minha senha";
+      }
+    });
+
+    recoveryPasswordForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const password = document.getElementById("recoveryNewPassword").value;
+      const confirmation = document.getElementById("recoveryConfirmPassword").value;
+      const submit = document.getElementById("recoveryPasswordSubmit");
+
+      if (password.length < 10) {
+        recoveryPasswordMessage.textContent = "A senha precisa ter pelo menos 10 caracteres.";
+        return;
+      }
+      if (password !== confirmation) {
+        recoveryPasswordMessage.textContent = "As senhas não coincidem.";
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = "Salvando...";
+      recoveryPasswordMessage.textContent = "";
+      try {
+        const { data, error } = await supabaseClient.auth.updateUser({ password });
+        if (error) throw error;
+        recoveryPasswordForm.reset();
+        recoveryPasswordForm.hidden = true;
+        document.getElementById("authForm").hidden = false;
+        document.querySelector(".auth-tabs").hidden = false;
+        forgotPasswordButton.hidden = false;
+        authError.textContent = "Senha alterada com sucesso. Você já pode entrar com a nova senha.";
+        if (data.user) {
+          openApp({
+            id: data.user.id,
+            email: data.user.email,
+            username: data.user.email,
+            name: data.user.user_metadata?.full_name || data.user.email,
+            phone: ""
+          });
+        }
+      } catch (error) {
+        recoveryPasswordMessage.textContent = error.message || "Não foi possível alterar a senha. Solicite um novo link.";
+      } finally {
+        submit.disabled = false;
+        submit.textContent = "Salvar nova senha";
+      }
+    });
+
+    supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        showLoginPage();
+        document.getElementById("authForm").hidden = true;
+        document.querySelector(".auth-tabs").hidden = true;
+        forgotPasswordButton.hidden = true;
+        recoveryPasswordForm.hidden = false;
+        recoveryPasswordMessage.textContent = "Crie uma nova senha para sua conta.";
+        document.getElementById("recoveryNewPassword").focus();
+      }
+    });
+
     function showSystemPage() {
       // Troca a tela de login pela tela principal; não usa rolagem para simular navegação.
       authScreen.hidden = true;
