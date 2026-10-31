@@ -1569,6 +1569,48 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       if (currentStaffRole === "admin") loadStaffUsers();
     }
 
+    function formatActivityDate(value) {
+      if (!value) return "Não informada";
+      const parts = String(value).split("-");
+      return parts.length === 3 ? parts[2] + "/" + parts[1] + "/" + parts[0] : String(value);
+    }
+
+    function renderTransactionActivityDetails(data, title) {
+      const section = document.createElement("div");
+      section.style.cssText = "margin-top:10px;padding:10px;border-radius:10px;background:var(--surface,rgba(127,127,127,.08));";
+      if (title) {
+        const heading = document.createElement("strong");
+        heading.textContent = title;
+        section.appendChild(heading);
+      }
+      const labels = {
+        type: "Tipo",
+        amount: "Valor",
+        category: "Categoria",
+        description: "Descrição",
+        transaction_date: "Data da movimentação"
+      };
+      const values = [
+        ["type", data.type === "income" || data.type === "receita" ? "Receita" : data.type === "expense" || data.type === "despesa" ? "Despesa" : data.type],
+        ["amount", data.amount !== undefined ? money(data.amount) : undefined],
+        ["category", data.category],
+        ["description", data.description],
+        ["transaction_date", data.transaction_date ? formatActivityDate(data.transaction_date) : undefined]
+      ];
+      values.forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") return;
+        const line = document.createElement("div");
+        line.style.cssText = "margin-top:5px;font-size:.9rem;overflow-wrap:anywhere;";
+        const label = document.createElement("strong");
+        label.textContent = labels[key] + ": ";
+        const content = document.createElement("span");
+        content.textContent = String(value);
+        line.append(label, content);
+        section.appendChild(line);
+      });
+      return section;
+    }
+
     async function loadStaffActivity() {
       if (currentStaffRole !== "admin") return;
       const message = document.getElementById("staffMessage");
@@ -1594,13 +1636,20 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         card.className = "staff-user";
         card.style.gridTemplateColumns = "minmax(0,1fr)";
         const heading = document.createElement("strong");
-        heading.textContent = (item.actor_name || "Conta") + " " + item.action + " uma " + (item.entity || "atividade");
+        const actionLabels = { criou: "criou", editou: "editou", excluiu: "excluiu" };
+        heading.textContent = (item.actor_name || "Conta") + " " + (actionLabels[item.action] || item.action) + " uma movimentação";
         const meta = document.createElement("small");
         const date = item.created_at ? new Date(item.created_at).toLocaleString("pt-BR") : "";
         meta.textContent = "Usuário: @" + (item.actor_username || "sem usuário") + " • " + date;
-        const details = document.createElement("small");
-        details.textContent = item.details ? JSON.stringify(item.details) : "Sem detalhes adicionais";
-        card.append(heading, meta, details);
+        card.append(heading, meta);
+
+        const details = item.details || {};
+        if (details.antes || details.depois) {
+          if (details.antes) card.appendChild(renderTransactionActivityDetails(details.antes, "Antes da edição"));
+          if (details.depois) card.appendChild(renderTransactionActivityDetails(details.depois, "Depois da edição"));
+        } else {
+          card.appendChild(renderTransactionActivityDetails(details, "Dados da movimentação"));
+        }
         list.appendChild(card);
       });
     }
