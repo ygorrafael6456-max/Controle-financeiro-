@@ -586,19 +586,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       memoryStorage[key] = stringValue;
       try { window.localStorage.setItem(key, stringValue); } catch (e) {}
     }
-    function appRemove(key) {
-      delete memoryStorage[key];
-      try { window.localStorage.removeItem(key); } catch (e) {}
-    }
-
-    const USERS_KEY = "controleFinanceiroUsuariosV2";
-    const LEGACY_USERS_KEY = "controleFinanceiroUsuariosV1";
-    // A sessão dura apenas enquanto a aba estiver aberta; não persistimos login no localStorage.
-    function getSessionUser() { try { return sessionStorage.getItem("controleFinanceiroSessaoV2"); } catch { return null; } }
-    function setSessionUser(username) { try { sessionStorage.setItem("controleFinanceiroSessaoV2", username); } catch {} }
-    function clearSessionUser() { try { sessionStorage.removeItem("controleFinanceiroSessaoV2"); } catch {} appRemove("controleFinanceiroSessaoV1"); }
     let currentUser = null;
-    const storageKey = () => "meuControleFinanceiroV1_" + (currentUser ? currentUser.username : "guest");
     const form = document.getElementById("transactionForm");
     const descriptionInput = document.getElementById("description");
     const typeInput = document.getElementById("type");
@@ -613,17 +601,6 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     let transactions = [];
     let editingId = null;
 
-    function loadTransactions() {
-      try {
-        const saved = JSON.parse(appGet(storageKey()) || "[]");
-        return Array.isArray(saved) ? saved : [];
-      } catch (error) {
-        return [];
-      }
-    }
-    function saveTransactions() {
-      appSet(storageKey(), JSON.stringify(transactions));
-    }
     function money(value) {
       return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
@@ -986,7 +963,7 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       URL.revokeObjectURL(url);
     });
 
-    // Login e perfis locais (não substitui autenticação com servidor).
+    // Autenticação e perfis gerenciados pelo Supabase Auth.
     const authScreen = document.getElementById("authScreen");
     const appShell = document.getElementById("appShell");
     const authForm = document.getElementById("authForm");
@@ -997,47 +974,6 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
     const authError = document.getElementById("authError");
     const authSubmit = document.getElementById("authSubmit");
     let authMode = "login";
-    function getUsers() {
-      try {
-        let raw = appGet(USERS_KEY);
-        if (raw === null) {
-          // Mantém compatibilidade com perfis antigos; a senha legada só é convertida após login válido.
-          const legacy = JSON.parse(appGet(LEGACY_USERS_KEY) || "[]");
-          return Array.isArray(legacy) ? legacy : [];
-        }
-        const u = JSON.parse(raw);
-        return Array.isArray(u) ? u : [];
-      } catch { return []; }
-    }
-    const encoder = new TextEncoder();
-    function bytesToBase64(bytes) { let binary = ""; bytes.forEach(b => binary += String.fromCharCode(b)); return btoa(binary); }
-    function base64ToBytes(value) { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); }
-    async function hashPassword(password, saltB64) {
-      if (!crypto?.subtle) throw new Error("Este navegador não oferece Web Crypto neste contexto. Abra o arquivo no Chrome/Edge atualizado ou publique-o em HTTPS.");
-      const salt = saltB64 ? base64ToBytes(saltB64) : crypto.getRandomValues(new Uint8Array(16));
-      const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-      const bits = await crypto.subtle.deriveBits({name:"PBKDF2", salt, iterations:310000, hash:"SHA-256"}, key, 256);
-      return { salt: bytesToBase64(salt), hash: bytesToBase64(new Uint8Array(bits)), algorithm:"PBKDF2-SHA-256", iterations:310000 };
-    }
-    async function verifyPassword(user, password) {
-      if (user.passwordHash && user.passwordSalt) {
-        const result = await hashPassword(password, user.passwordSalt);
-        return result.hash === user.passwordHash;
-      }
-      // Compatibilidade: confere a senha antiga em texto uma única vez e migra para hash.
-      if (typeof user.password === "string" && user.password === password) {
-        const result = await hashPassword(password);
-        delete user.password;
-        Object.assign(user, {passwordHash:result.hash, passwordSalt:result.salt, passwordAlgorithm:result.algorithm, passwordIterations:result.iterations});
-        const all = getUsers().map(u => u.username === user.username ? user : u);
-        appSet(USERS_KEY, JSON.stringify(all));
-        appRemove(LEGACY_USERS_KEY);
-        return true;
-      }
-      return false;
-    }
-    let failedAttempts = 0;
-    let lockUntil = 0;
     function setAuthMode(mode) {
       authMode = mode;
       const registering = mode === "register";
@@ -1478,7 +1414,6 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         return;
       }
 
-      clearSessionUser();
       currentUser = null;
       hideProfilePanels();
       transactions = [];
