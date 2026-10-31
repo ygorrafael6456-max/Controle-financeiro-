@@ -52,9 +52,12 @@ jobs:
         working-directory: android
         run: gradle --no-daemon assembleRelease
 
+      - name: Preparar nome do APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk controle-financeiro.apk
+
       - name: Publicar versão e APK
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v$VERSION" "android/app/build/outputs/apk/release/app-release.apk#Controle Financeiro para Android" --repo "$GITHUB_REPOSITORY" --title "Controle Financeiro v$VERSION" --notes "Aplicativo oficial Controle Financeiro para Android." --latest
+          gh release create "v$VERSION" "controle-financeiro.apk#Controle Financeiro para Android" --repo "$GITHUB_REPOSITORY" --title "Controle Financeiro v$VERSION" --notes "Aplicativo oficial Controle Financeiro para Android." --latest
