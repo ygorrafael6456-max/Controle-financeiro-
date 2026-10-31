@@ -1393,6 +1393,8 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
         const { data: staffRole, error: staffRoleError } = await supabaseClient.rpc("get_my_staff_role");
         currentStaffRole = staffRoleError ? null : staffRole;
         document.getElementById("staffMenuItem").hidden = !["admin", "staff"].includes(currentStaffRole);
+        document.getElementById("staffAdminTools").hidden = currentStaffRole !== "admin";
+        document.getElementById("staffActivityTools").hidden = currentStaffRole !== "admin";
         document.getElementById("staffIntro").textContent = currentStaffRole === "admin"
           ? "Gerencie os cargos das contas cadastradas. Somente administradores podem alterar a equipe."
           : "Área reservada à equipe. As ferramentas específicas serão liberadas conforme as permissões.";
