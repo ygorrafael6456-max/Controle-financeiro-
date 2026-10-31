@@ -1219,20 +1219,29 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
           profile = data;
         }
 
-        // Se o perfil já existe, mas ainda não tem username, grava o identificador
-        // de recuperação no Supabase. Assim ele não é recriado apenas em memória
-        // a cada login ou atualização do site.
+        // Só cria um username automático se o campo ainda estiver vazio.
+        // O filtro .is("username", null) impede que uma operação atrasada de login
+        // substitua um nome personalizado que acabou de ser salvo pelo usuário.
         if (!profile.username) {
-          const { data, error } = await supabaseClient
+          const { error } = await supabaseClient
             .from("profiles")
             .update({ username: fallbackUsername })
             .eq("id", user.id)
-            .select("id, display_name, username, phone")
-            .single();
+            .is("username", null);
 
           if (error) throw error;
-          profile = data;
         }
+
+        // Sempre relê o perfil depois da possível criação do username automático.
+        // Assim, a interface usa exatamente o valor persistido no banco.
+        const { data: confirmedProfile, error: confirmedProfileError } = await supabaseClient
+          .from("profiles")
+          .select("id, display_name, username, phone")
+          .eq("id", user.id)
+          .single();
+
+        if (confirmedProfileError) throw confirmedProfileError;
+        profile = confirmedProfile;
 
         currentUser = {
           ...user,
@@ -1341,12 +1350,12 @@ body.dark-mode .summary .card{background:linear-gradient(145deg,var(--card),#1d2
       try {
         const { data, error } = await supabaseClient
           .from("profiles")
-          .upsert({
-            id: currentUser.id,
+          .update({
             display_name: name,
             username,
             phone
-          }, { onConflict: "id" })
+          })
+          .eq("id", currentUser.id)
           .select("id, display_name, username, phone")
           .single();
 
